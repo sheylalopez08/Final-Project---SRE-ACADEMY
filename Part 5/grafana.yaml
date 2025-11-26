@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-cellphone
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-deployment
+  namespace: my-cellphone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            - name: GF_PATHS_PROVISIONING
+              value: "/etc/grafana/provisioning"
+          volumeMounts:
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+      volumes:
+        - name: grafana-storage
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources-config
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: my-cellphone
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      nodePort: 30000
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: my-cellphone
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources-config
+  namespace: my-cellphone
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service.my-cellphone.svc.cluster.local:9090
+        isDefault: true
+      - name: OpenTelemetry
+        type: prometheus
+        access: proxy
+        url: http://otel-collector.my-cellphone.svc.cluster.local:9464
+        basicAuth: false
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: my-cellphone
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: 'Default'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+
+  flask-dashboard.json: |
+    {"id":null,"uid":"mycellphone-dashboard","title":"My Cellphone App — Observability","tags":["flask","my-cellphone"],"timezone":"browser","schemaVersion":38,"version":1,"refresh":"10s","time":{"from":"now-6h","to":"now"},"panels":[{"title":"Requests por segundo (RPS)","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"sum(rate(flask_http_request_total[5m]))","legendFormat":"rps"}]},{"title":"Errores 5xx por segundo","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"sum(rate(flask_http_request_errors_total[5m]))","legendFormat":"5xx/s"}]},{"title":"Latencia p95","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"histogram_quantile(0.95, sum(rate(flask_request_latency_seconds_bucket[5m])) by (le))","legendFormat":"p95"}]},{"title":"Latencia p99","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"histogram_quantile(0.99, sum(rate(flask_request_latency_seconds_bucket[5m])) by (le))","legendFormat":"p99"}]}]}
+
+  otel-dashboard.json: |
+    {"id":null,"uid":"otel-dashboard","title":"OTEL Metrics","tags":["otel","observability"],"timezone":"browser","schemaVersion":38,"version":1,"refresh":"10s","time":{"from":"now-6h","to":"now"},"panels":[{"title":"Requests por segundo (RPS)","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"sum(rate(http_server_requests_seconds_count[5m]))","legendFormat":"rps"}]},{"title":"Errores por segundo","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]))","legendFormat":"errors"}]},{"title":"Latencia p95","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le))","legendFormat":"p95"}]},{"title":"Latencia p99","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket[5m])) by (le))","legendFormat":"p99"}]}]}

@@ -1,0 +1,19 @@
+---
+- name: Apply Prometheus and OpenTelemetry Collector configuration in Minikube
+  hosts: local
+  gather_facts: false
+
+  tasks:
+    - name: Apply Prometheus configuration
+      command: kubectl apply -f prometheus.yaml
+      args:
+        chdir: "/Users/sheyla.lopez/Documents/FINAL PROJECT - SRE ACADEMY/Final Project /My Cellphone App/Part 4"
+
+    - name: Apply OpenTelemetry Collector configuration
+      command: kubectl apply -f otel-collector.yaml
+      args:
+        chdir: "/Users/sheyla.lopez/Documents/FINAL PROJECT - SRE ACADEMY/Final Project /My Cellphone App/Part 4"
+
+    - name: Reminder to access Prometheus UI
+      debug:
+        msg: "Ejecuta: minikube service prometheus-service -n monitoring"

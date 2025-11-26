@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cellphone-app
+  namespace: my-cellphone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-cellphone-app
+  template:
+    metadata:
+      labels:
+        app: my-cellphone-app
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: app
+          image: sheylalopez08/my-cellphone-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.opentelemetry.svc.cluster.local:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "my-cellphone-app"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"

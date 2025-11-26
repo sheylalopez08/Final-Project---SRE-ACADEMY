@@ -1,0 +1,57 @@
+---
+- name: Infraestructura como Código - Configuración completa
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+
+  tasks:
+    - name: Detectar sistema operativo
+      ansible.builtin.debug:
+        msg: "Sistema operativo detectado: {{ ansible_facts['os_family'] }}"
+
+    - name: Instalar paquetes requeridos en macOS
+      ansible.builtin.homebrew:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - minikube
+        - podman
+      when: ansible_facts['os_family'] == 'Darwin'
+
+    - name: Instalar paquetes requeridos en Linux (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      loop:
+        - curl
+        - conntrack
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Instalar Minikube en Linux
+      ansible.builtin.get_url:
+        url: "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64"
+        dest: "/usr/local/bin/minikube"
+        mode: '0755'
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Iniciar servicio Podman (Linux)
+      ansible.builtin.service:
+        name: podman
+        state: started
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Iniciar Minikube
+      ansible.builtin.command: minikube start
+      register: minikube_start
+      failed_when: false
+      changed_when: "'Done!' in minikube_start.stdout or 'Starting control plane' in minikube_start.stdout"
+
+    - name: Mostrar estado de Minikube
+      ansible.builtin.command: minikube status
+      register: minikube_status
+      changed_when: false
+
+    - name: Resultado del estado de Minikube
+      ansible.builtin.debug:
+        var: minikube_status.stdout

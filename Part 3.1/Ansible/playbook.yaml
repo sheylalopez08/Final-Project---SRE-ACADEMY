@@ -1,0 +1,79 @@
+---
+- name: Desplegar aplicación Flask en Minikube
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+
+  vars:
+    namespace: "my-cellphone"
+    kubeconfig_path: "{{ lookup('env', 'HOME') + '/.kube/config' }}"
+    image_name: "my-cellphone-app:tag"
+    deployment_path: "/Users/sheyla.lopez/Documents/FINAL PROJECT - SRE ACADEMY/Final Project /My Cellphone App/Part 3/deployment.yaml"
+    service_path: "/Users/sheyla.lopez/Documents/FINAL PROJECT - SRE ACADEMY/Final Project /My Cellphone App/Part 3/service.yaml"
+
+  tasks:
+    - name: Iniciar Minikube si no está corriendo
+      ansible.builtin.command: minikube start
+      register: minikube_start
+      # No marcamos failed si ya estaba iniciado
+      failed_when: false
+      changed_when: >
+        'Done!' in minikube_start.stdout or
+        'Starting control plane' in minikube_start.stdout or
+        'Restarting existing' in minikube_start.stdout
+
+    - name: Cargar imagen Docker en Minikube
+      ansible.builtin.command: minikube image load {{ image_name }}
+
+    - name: Asegurar namespace existe
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+
+    - name: Aplicar Deployment
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ namespace }}"
+        src: "{{ deployment_path }}"
+
+    - name: Aplicar Service
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ namespace }}"
+        src: "{{ service_path }}"
+
+    # ----- Checks y visibilidad -----
+    - name: Esperar rollout del Deployment
+      ansible.builtin.command: >
+        kubectl --kubeconfig "{{ kubeconfig_path }}"
+        -n "{{ namespace }}"
+        rollout status deployment/my-cellphone-app --timeout=120s
+      register: rollout
+      changed_when: false
+
+    - name: Ver Pods en el namespace
+      ansible.builtin.command: >
+        kubectl --kubeconfig "{{ kubeconfig_path }}" -n "{{ namespace }}" get pods -o wide
+      register: pods_output
+      changed_when: false
+
+    - name: Resultado pods
+      ansible.builtin.debug:
+        var: pods_output.stdout
+
+    - name: Ver Services en el namespace
+      ansible.builtin.command: >
+        kubectl --kubeconfig "{{ kubeconfig_path }}" -n "{{ namespace }}" get svc -o wide
+      register: svc_output
+      changed_when: false
+
+    - name: Resultado services
+      ansible.builtin.debug:
+        var: svc_output.stdout
